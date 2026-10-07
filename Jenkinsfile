@@ -4,6 +4,7 @@ pipeline {
     options {
         timestamps()
         disableConcurrentBuilds()
+        skipDefaultCheckout(true)
     }
 
     stages {
@@ -35,19 +36,31 @@ pipeline {
             }
         }
 
+        stage('Package Application') {
+            steps {
+                sh '''
+                    tar -czf django-release.tar.gz \
+                        --exclude=.git \
+                        --exclude=.venv \
+                        --exclude=venv \
+                        --exclude=db.sqlite3 \
+                        --exclude=django-release.tar.gz \
+                        --exclude=__pycache__ \
+                        --exclude=.env \
+                        manage.py config web requirements.txt
+                '''
+            }
+        }
+
         stage('Provision VPS') {
             steps {
                 withCredentials([
-                    string(
-                        credentialsId: 'django-vps-sudo',
-                        variable: 'BECOME_PASSWORD'
-                    )
+                    string(credentialsId: 'django-vps-sudo', variable: 'BECOME_PASSWORD')
                 ]) {
                     sh '''
                         set +x
                         set -eu
                         umask 077
-
                         PASSFILE=$(mktemp)
                         trap 'rm -f "$PASSFILE"' EXIT
                         printf '%s\\n' "$BECOME_PASSWORD" > "$PASSFILE"
@@ -61,14 +74,40 @@ pipeline {
                 }
             }
         }
+
+        stage('Deploy Django') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'django-vps-sudo', variable: 'BECOME_PASSWORD')
+                ]) {
+                    sh '''
+                        set +x
+                        set -eu
+                        umask 077
+                        PASSFILE=$(mktemp)
+                        trap 'rm -f "$PASSFILE"' EXIT
+                        printf '%s\\n' "$BECOME_PASSWORD" > "$PASSFILE"
+                        unset BECOME_PASSWORD
+
+                        ansible-playbook \
+                            -i ansible/inventory.ini \
+                            ansible/deploy.yml \
+                            --become-password-file "$PASSFILE"
+                    '''
+                }
+            }
+        }
     }
 
     post {
         success {
-            echo 'Jenkins pipeline completed successfully.'
+            echo 'Django tests, provisioning and deployment completed successfully.'
         }
         failure {
-            echo 'Jenkins pipeline failed. Check the console output.'
+            echo 'Pipeline failed. Review the Jenkins console output.'
+        }
+        always {
+            sh 'rm -f django-release.tar.gz'
         }
     }
 }

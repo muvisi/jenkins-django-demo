@@ -126,3 +126,17 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+# Jenkins deployment settings
+import os
+
+ALLOWED_HOSTS = os.environ.get(
+    "DJANGO_ALLOWED_HOSTS",
+    "localhost,127.0.0.1"
+).split(",")
+
+DEBUG = os.environ.get("DJANGO_DEBUG", "False").lower() == "true"
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", SECRET_KEY)
+
+STATIC_ROOT = BASE_DIR / "staticfiles"
