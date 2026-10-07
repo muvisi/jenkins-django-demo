@@ -97,6 +97,29 @@ pipeline {
                 }
             }
         }
+
+        stage('Configure Nginx') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'django-vps-sudo', variable: 'BECOME_PASSWORD')
+                ]) {
+                    sh '''
+                        set +x
+                        set -eu
+                        umask 077
+                        PASSFILE=$(mktemp)
+                        trap 'rm -f "$PASSFILE"' EXIT
+                        printf '%s\\n' "$BECOME_PASSWORD" > "$PASSFILE"
+                        unset BECOME_PASSWORD
+
+                        ansible-playbook \
+                            -i ansible/inventory.ini \
+                            ansible/nginx.yml \
+                            --become-password-file "$PASSFILE"
+                    '''
+                }
+            }
+        }
     }
 
     post {
