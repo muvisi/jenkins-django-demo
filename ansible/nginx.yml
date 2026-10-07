@@ -1,0 +1,52 @@
+---
+- name: Configure Nginx for Django
+  hosts: django_servers
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Check existing default Nginx listeners
+      ansible.builtin.shell: |
+        nginx -T 2>&1 | grep -E '^[[:space:]]*listen .*default_server' || true
+      register: default_listeners
+      changed_when: false
+
+    - name: Stop if another default server is configured
+      ansible.builtin.assert:
+        that:
+          - default_listeners.stdout | trim == ''
+        fail_msg: >-
+          An existing Nginx default server was detected.
+          Deployment stopped to avoid changing existing websites.
+
+    - name: Install Django Nginx configuration
+      ansible.builtin.template:
+        src: templates/nginx-ip.conf.j2
+        dest: /etc/nginx/sites-available/jenkins-django-demo
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Enable Django Nginx site
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/jenkins-django-demo
+        dest: /etc/nginx/sites-enabled/jenkins-django-demo
+        state: link
+
+    - name: Validate Nginx configuration
+      ansible.builtin.command: nginx -t
+      changed_when: false
+
+    - name: Reload Nginx
+      ansible.builtin.systemd_service:
+        name: nginx
+        state: reloaded
+
+    - name: Verify public Django endpoint
+      ansible.builtin.uri:
+        url: http://66.23.236.42/health/
+        status_code: 200
+      register: health_result
+      retries: 5
+      delay: 3
+      until: health_result.status == 200
