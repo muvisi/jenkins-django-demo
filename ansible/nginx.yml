@@ -5,19 +5,24 @@
   gather_facts: false
 
   tasks:
-    - name: Check existing default Nginx listeners
+    - name: Check for conflicting default Nginx servers
       ansible.builtin.shell: |
-        nginx -T 2>&1 | grep -E '^[[:space:]]*listen .*default_server' || true
-      register: default_listeners
+        nginx -T 2>&1 | awk '
+          /^# configuration file / { file=$0 }
+          /^[[:space:]]*listen .*default_server/ {
+            if (file !~ /sites-enabled\\/jenkins-django-demo:/) {
+              print file ": " $0
+            }
+          }
+        '
+      register: conflicting_defaults
       changed_when: false
 
-    - name: Stop if another default server is configured
+    - name: Stop if another default server exists
       ansible.builtin.assert:
         that:
-          - default_listeners.stdout | trim == ''
-        fail_msg: >-
-          An existing Nginx default server was detected.
-          Deployment stopped to avoid changing existing websites.
+          - conflicting_defaults.stdout | trim == ''
+        fail_msg: "Another Nginx default server exists. No changes made."
 
     - name: Install Django Nginx configuration
       ansible.builtin.template:

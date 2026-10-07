@@ -71,6 +71,15 @@
         group: deploy
         mode: '0640'
 
+    - name: Configure Django allowed hosts
+      ansible.builtin.lineinfile:
+        path: /etc/jenkins-django-demo.env
+        regexp: '^DJANGO_ALLOWED_HOSTS='
+        line: 'DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,66.23.236.42'
+        owner: root
+        group: deploy
+        mode: '0640'
+
     - name: Run database migrations
       ansible.builtin.shell: |
         set -a
