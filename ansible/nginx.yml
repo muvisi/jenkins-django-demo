@@ -10,7 +10,7 @@
         nginx -T 2>&1 | awk '
           /^# configuration file / { file=$0 }
           /^[[:space:]]*listen .*default_server/ {
-            if (file !~ /sites-enabled\\/jenkins-django-demo:/) {
+            if (index(file, "jenkins-django-demo") == 0) {
               print file ": " $0
             }
           }
