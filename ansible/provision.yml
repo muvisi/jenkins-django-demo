@@ -1,0 +1,30 @@
+---
+- name: Provision Django deployment server
+  hosts: django_servers
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Display server information
+      ansible.builtin.debug:
+        msg:
+          - "Hostname: {{ ansible_facts['hostname'] }}"
+          - "OS: {{ ansible_facts['distribution'] }}"
+          - "Version: {{ ansible_facts['distribution_version'] }}"
+
+    - name: Create application directory
+      ansible.builtin.file:
+        path: /opt/jenkins-django-demo
+        state: directory
+        owner: deploy
+        group: deploy
+        mode: '0755'
+
+    - name: Verify application directory
+      ansible.builtin.stat:
+        path: /opt/jenkins-django-demo
+      register: app_directory
+
+    - name: Display directory status
+      ansible.builtin.debug:
+        msg: "Application directory exists: {{ app_directory.stat.exists }}"
