@@ -105,6 +105,7 @@ def home(request):
             <div class="chip">Gunicorn</div>
             <div class="chip">Nginx</div>
             <div class="chip">No Terraform< for now /div>
+             <div class="chip">provision was successfull/div>
 
         </div>
     </section>
