@@ -86,7 +86,7 @@ def home(request):
 <body>
 <div class="shell">
     <nav>
-        <div class="brand">⚡ DEVOPS 15<span> / PIPELINE</span></div>
+        <div class="brand">⚡ DEVOPS 15-By sam<span> / PIPELINE</span></div>
         <div class="pill" id="status">● Checking application...</div>
     </nav>
 
@@ -159,7 +159,7 @@ def home(request):
     </section>
 
     <div class="footer">
-        <p>Designed &amp; Presented by <strong>Devops15 week 4</strong></p>
+        <p>Designed &amp; Presented by <strong>Samuel mwangangi</strong></p>
         <p>CI/CD Pipeline Demonstration • DevOps Automation</p>
         <p><a href="/health/" target="_blank" rel="noopener">View Application Health API ↗</a></p>
     </div>
