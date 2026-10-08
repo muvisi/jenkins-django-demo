@@ -8,6 +8,7 @@
     app_dir: /opt/jenkins-django-demo
     app_user: deploy
     app_service: jenkins-django-demo
+    django_allowed_hosts: "localhost,127.0.0.1,66.23.236.42,demo.nachat.co.ke"
 
   tasks:
     - name: Install Python dependencies
@@ -54,7 +55,9 @@
         python3 - <<'PY'
         import secrets
         from pathlib import Path
+
         secret = secrets.token_urlsafe(64)
+
         Path("/etc/jenkins-django-demo.env").write_text(
             f"DJANGO_SECRET_KEY={secret}\n"
             "DJANGO_DEBUG=False\n"
@@ -68,17 +71,18 @@
       ansible.builtin.file:
         path: /etc/jenkins-django-demo.env
         owner: root
-        group: deploy
+        group: "{{ app_user }}"
         mode: '0640'
 
     - name: Configure Django allowed hosts
       ansible.builtin.lineinfile:
         path: /etc/jenkins-django-demo.env
         regexp: '^DJANGO_ALLOWED_HOSTS='
-        line: 'DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,66.23.236.42'
+        line: "DJANGO_ALLOWED_HOSTS={{ django_allowed_hosts }}"
         owner: root
-        group: deploy
+        group: "{{ app_user }}"
         mode: '0640'
+      no_log: true
 
     - name: Run database migrations
       ansible.builtin.shell: |
@@ -89,7 +93,7 @@
       args:
         chdir: "{{ app_dir }}"
         executable: /bin/bash
-      become_user: deploy
+      become_user: "{{ app_user }}"
       no_log: true
 
     - name: Install Gunicorn service

@@ -1,0 +1,62 @@
+---
+- name: Install SSL for Django
+  hosts: django_servers
+  become: true
+  gather_facts: false
+
+  vars:
+    django_domain: demo.nachat.co.ke
+    letsencrypt_email: mwangangimuvisi@gmail.com
+
+  tasks:
+    - name: Install Certbot
+      ansible.builtin.apt:
+        name: certbot
+        state: present
+        update_cache: true
+
+    - name: Create certificate challenge directory
+      ansible.builtin.file:
+        path: /var/www/letsencrypt/.well-known/acme-challenge
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Obtain Let's Encrypt certificate
+      ansible.builtin.command:
+        argv:
+          - certbot
+          - certonly
+          - --webroot
+          - -w
+          - /var/www/letsencrypt
+          - -d
+          - "{{ django_domain }}"
+          - --email
+          - "{{ letsencrypt_email }}"
+          - --agree-tos
+          - --non-interactive
+          - --keep-until-expiring
+      register: certbot_result
+
+    - name: Check SSL certificate
+      ansible.builtin.stat:
+        path: "/etc/letsencrypt/live/{{ django_domain }}/fullchain.pem"
+        follow: true
+      register: ssl_certificate
+
+    - name: Ensure certificate exists
+      ansible.builtin.assert:
+        that:
+          - ssl_certificate.stat.exists
+
+    - name: Enable certificate renewal
+      ansible.builtin.systemd_service:
+        name: certbot.timer
+        state: started
+        enabled: true
+
+    - name: Display certificate status
+      ansible.builtin.debug:
+        msg: "SSL certificate available for {{ django_domain }}"

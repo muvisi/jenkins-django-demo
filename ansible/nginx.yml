@@ -24,6 +24,16 @@
           - conflicting_defaults.stdout | trim == ''
         fail_msg: "Another Nginx default server exists. No changes made."
 
+    - name: Check SSL certificate
+      ansible.builtin.stat:
+        path: /etc/letsencrypt/live/demo.nachat.co.ke/fullchain.pem
+        follow: true
+      register: ssl_certificate
+
+    - name: Set SSL status
+      ansible.builtin.set_fact:
+        ssl_certificate_exists: "{{ ssl_certificate.stat.exists }}"
+
     - name: Install Django Nginx configuration
       ansible.builtin.template:
         src: templates/nginx-ip.conf.j2
@@ -39,7 +49,8 @@
         state: link
 
     - name: Validate Nginx configuration
-      ansible.builtin.command: nginx -t
+      ansible.builtin.command:
+        cmd: nginx -t
       changed_when: false
 
     - name: Reload Nginx
@@ -47,7 +58,7 @@
         name: nginx
         state: reloaded
 
-    - name: Verify public Django endpoint
+    - name: Verify public IP endpoint
       ansible.builtin.uri:
         url: http://66.23.236.42/health/
         status_code: 200
