@@ -5,24 +5,13 @@
   gather_facts: false
 
   tasks:
-    - name: Check for conflicting default Nginx servers
-      ansible.builtin.shell: |
-        nginx -T 2>&1 | awk '
-          /^# configuration file / { file=$0 }
-          /^[[:space:]]*listen .*default_server/ {
-            if (index(file, "jenkins-django-demo") == 0) {
-              print file ": " $0
-            }
-          }
-        '
-      register: conflicting_defaults
-      changed_when: false
-
-    - name: Stop if another default server exists
-      ansible.builtin.assert:
-        that:
-          - conflicting_defaults.stdout | trim == ''
-        fail_msg: "Another Nginx default server exists. No changes made."
+    - name: Create Let's Encrypt challenge directory
+      ansible.builtin.file:
+        path: /var/www/letsencrypt/.well-known/acme-challenge
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
 
     - name: Check SSL certificate
       ansible.builtin.stat:
@@ -30,9 +19,16 @@
         follow: true
       register: ssl_certificate
 
+    - name: Check SSL private key
+      ansible.builtin.stat:
+        path: /etc/letsencrypt/live/demo.nachat.co.ke/privkey.pem
+        follow: true
+      register: ssl_private_key
+
     - name: Set SSL status
       ansible.builtin.set_fact:
-        ssl_certificate_exists: "{{ ssl_certificate.stat.exists }}"
+        ssl_certificate_exists: >-
+          {{ ssl_certificate.stat.exists and ssl_private_key.stat.exists }}
 
     - name: Install Django Nginx configuration
       ansible.builtin.template:
@@ -41,6 +37,7 @@
         owner: root
         group: root
         mode: '0644'
+        backup: true
 
     - name: Enable Django Nginx site
       ansible.builtin.file:

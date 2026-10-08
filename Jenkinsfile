@@ -120,6 +120,71 @@ pipeline {
                 }
             }
         }
+
+        stage('Configure HTTPS SSL') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'django-vps-sudo', variable: 'BECOME_PASSWORD')
+                ]) {
+                    sh '''
+                        set +x
+                        set -eu
+                        umask 077
+
+                        PASSFILE=$(mktemp)
+                        trap 'rm -f "$PASSFILE"' EXIT
+                        printf '%s\\n' "$BECOME_PASSWORD" > "$PASSFILE"
+                        unset BECOME_PASSWORD
+
+                        ansible-playbook \
+                            -i ansible/inventory.ini \
+                            ansible/ssl.yml \
+                            --become-password-file "$PASSFILE"
+                    '''
+                }
+            }
+        }
+
+        stage('Activate HTTPS') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'django-vps-sudo', variable: 'BECOME_PASSWORD')
+                ]) {
+                    sh '''
+                        set +x
+                        set -eu
+                        umask 077
+
+                        PASSFILE=$(mktemp)
+                        trap 'rm -f "$PASSFILE"' EXIT
+                        printf '%s\\n' "$BECOME_PASSWORD" > "$PASSFILE"
+                        unset BECOME_PASSWORD
+
+                        ansible-playbook \
+                            -i ansible/inventory.ini \
+                            ansible/nginx.yml \
+                            --become-password-file "$PASSFILE"
+                    '''
+                }
+            }
+        }
+
+        stage('Verify HTTPS') {
+            steps {
+                sh '''
+                    set -eu
+
+                    curl --fail --show-error --silent \
+                        --retry 5 \
+                        --retry-delay 3 \
+                        https://demo.nachat.co.ke/health/
+
+                    curl --fail --show-error --silent \
+                        http://66.23.236.42/health/
+                '''
+            }
+        }
+
     }
 
     post {

@@ -1,5 +1,5 @@
 ---
-- name: Install SSL for Django
+- name: Install and configure SSL certificate
   hosts: django_servers
   become: true
   gather_facts: false
@@ -11,11 +11,12 @@
   tasks:
     - name: Install Certbot
       ansible.builtin.apt:
-        name: certbot
+        name:
+          - certbot
         state: present
         update_cache: true
 
-    - name: Create certificate challenge directory
+    - name: Create Let's Encrypt challenge directory
       ansible.builtin.file:
         path: /var/www/letsencrypt/.well-known/acme-challenge
         state: directory
@@ -23,7 +24,16 @@
         group: root
         mode: '0755'
 
-    - name: Obtain Let's Encrypt certificate
+    - name: Check domain challenge endpoint
+      ansible.builtin.uri:
+        url: "http://{{ django_domain }}/.well-known/acme-challenge/"
+        status_code:
+          - 200
+          - 403
+          - 404
+      register: challenge_check
+
+    - name: Obtain or renew Let's Encrypt certificate
       ansible.builtin.command:
         argv:
           - certbot
@@ -39,24 +49,38 @@
           - --non-interactive
           - --keep-until-expiring
       register: certbot_result
+      changed_when: "'Certificate not yet due for renewal' not in (certbot_result.stdout | default(''))"
 
-    - name: Check SSL certificate
+    - name: Verify SSL certificate
       ansible.builtin.stat:
         path: "/etc/letsencrypt/live/{{ django_domain }}/fullchain.pem"
         follow: true
-      register: ssl_certificate
+      register: certificate
 
-    - name: Ensure certificate exists
+    - name: Fail if certificate was not installed
       ansible.builtin.assert:
         that:
-          - ssl_certificate.stat.exists
+          - certificate.stat.exists
+        fail_msg: "SSL certificate installation failed."
 
-    - name: Enable certificate renewal
+    - name: Enable automatic SSL renewal
       ansible.builtin.systemd_service:
         name: certbot.timer
-        state: started
         enabled: true
+        state: started
 
-    - name: Display certificate status
+    - name: Install Nginx reload hook after certificate renewal
+      ansible.builtin.copy:
+        dest: /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+        content: |
+          #!/bin/sh
+          set -eu
+          nginx -t
+          systemctl reload nginx
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Display SSL installation result
       ansible.builtin.debug:
-        msg: "SSL certificate available for {{ django_domain }}"
+        msg: "SSL certificate installed for {{ django_domain }}"
