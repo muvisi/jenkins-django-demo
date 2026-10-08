@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -5,6 +6,12 @@ pipeline {
         timestamps()
         disableConcurrentBuilds()
         skipDefaultCheckout(true)
+    }
+
+    environment {
+        // Replace with your actual domain and email
+        DJANGO_DOMAIN = 'demo.nachat.co.ke'
+        LETSENCRYPT_EMAIL = 'mwangangimuvisi@gmail.com'
     }
 
     stages {
@@ -17,6 +24,7 @@ pipeline {
         stage('Verify Tools') {
             steps {
                 sh '''
+                    set -eu
                     python3 --version
                     ansible --version
                     git --version
@@ -27,6 +35,7 @@ pipeline {
         stage('Django Tests') {
             steps {
                 sh '''
+                    set -eu
                     python3 -m venv .venv
                     . .venv/bin/activate
                     pip install -r requirements.txt
@@ -39,6 +48,7 @@ pipeline {
         stage('Package Application') {
             steps {
                 sh '''
+                    set -eu
                     tar -czf django-release.tar.gz \
                         --exclude=.git \
                         --exclude=.venv \
@@ -121,7 +131,14 @@ pipeline {
             }
         }
 
-        stage('Configure HTTPS SSL') {
+        stage('Configure HTTPS / SSL') {
+            when {
+                expression {
+                    return env.DJANGO_DOMAIN?.trim() &&
+                           env.LETSENCRYPT_EMAIL?.trim()
+                }
+            }
+
             steps {
                 withCredentials([
                     string(credentialsId: 'django-vps-sudo', variable: 'BECOME_PASSWORD')
@@ -139,61 +156,44 @@ pipeline {
                         ansible-playbook \
                             -i ansible/inventory.ini \
                             ansible/ssl.yml \
-                            --become-password-file "$PASSFILE"
-                    '''
-                }
-            }
-        }
-
-        stage('Activate HTTPS') {
-            steps {
-                withCredentials([
-                    string(credentialsId: 'django-vps-sudo', variable: 'BECOME_PASSWORD')
-                ]) {
-                    sh '''
-                        set +x
-                        set -eu
-                        umask 077
-
-                        PASSFILE=$(mktemp)
-                        trap 'rm -f "$PASSFILE"' EXIT
-                        printf '%s\\n' "$BECOME_PASSWORD" > "$PASSFILE"
-                        unset BECOME_PASSWORD
-
-                        ansible-playbook \
-                            -i ansible/inventory.ini \
-                            ansible/nginx.yml \
-                            --become-password-file "$PASSFILE"
+                            --become-password-file "$PASSFILE" \
+                            --extra-vars "django_domain=$DJANGO_DOMAIN letsencrypt_email=$LETSENCRYPT_EMAIL"
                     '''
                 }
             }
         }
 
         stage('Verify HTTPS') {
+            when {
+                expression {
+                    return env.DJANGO_DOMAIN?.trim() &&
+                           env.LETSENCRYPT_EMAIL?.trim()
+                }
+            }
+
             steps {
                 sh '''
                     set -eu
-
                     curl --fail --show-error --silent \
                         --retry 5 \
                         --retry-delay 3 \
-                        https://demo.nachat.co.ke/health/
-
-                    curl --fail --show-error --silent \
-                        http://66.23.236.42/health/
+                        --max-time 20 \
+                        "https://${DJANGO_DOMAIN}/health/"
                 '''
             }
         }
-
     }
 
     post {
         success {
-            echo 'Django tests, provisioning and deployment completed successfully.'
+            echo 'Django pipeline completed successfully.'
+            echo 'Review the HTTPS stages to confirm whether SSL was configured.'
         }
+
         failure {
-            echo 'Pipeline failed. Review the Jenkins console output.'
+            echo 'Pipeline failed. Review Jenkins console output.'
         }
+
         always {
             sh 'rm -f django-release.tar.gz'
         }

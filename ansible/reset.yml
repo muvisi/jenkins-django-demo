@@ -1,0 +1,68 @@
+---
+- name: Reset Django demo VPS
+  hosts: django_servers
+  become: true
+  gather_facts: false
+
+  vars:
+    app_name: jenkins-django-demo
+
+  tasks:
+    - name: Check if Django service exists
+      ansible.builtin.stat:
+        path: "/etc/systemd/system/{{ app_name }}.service"
+      register: django_service
+
+    - name: Stop and disable Django service
+      ansible.builtin.systemd:
+        name: "{{ app_name }}"
+        state: stopped
+        enabled: false
+      when: django_service.stat.exists
+
+    - name: Remove Django service
+      ansible.builtin.file:
+        path: "/etc/systemd/system/{{ app_name }}.service"
+        state: absent
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Remove Django application
+      ansible.builtin.file:
+        path: "/opt/{{ app_name }}"
+        state: absent
+
+    - name: Remove Django environment
+      ansible.builtin.file:
+        path: "/etc/{{ app_name }}.env"
+        state: absent
+
+    - name: Remove demo Nginx enabled configuration
+      ansible.builtin.file:
+        path: "/etc/nginx/sites-enabled/{{ app_name }}"
+        state: absent
+
+    - name: Remove demo Nginx available configuration
+      ansible.builtin.file:
+        path: "/etc/nginx/sites-available/{{ app_name }}"
+        state: absent
+
+    - name: Validate Nginx
+      ansible.builtin.command: nginx -t
+      changed_when: false
+
+    - name: Reload Nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded
+
+    - name: Confirm application was removed
+      ansible.builtin.stat:
+        path: "/opt/{{ app_name }}"
+      register: app_directory
+
+    - name: Display reset result
+      ansible.builtin.debug:
+        msg: "Django demo removed: {{ not app_directory.stat.exists }}"
